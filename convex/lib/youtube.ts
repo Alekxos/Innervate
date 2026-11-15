@@ -80,19 +80,9 @@ function collect(obj: any, key: string, out: any[] = []): any[] {
   return out;
 }
 
-export async function searchYouTube(query: string, limit = 8): Promise<VideoHit[]> {
-  // sp=EgIQAQ== filters to videos only.
-  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(
-    query,
-  )}&sp=EgIQAQ%253D%253D&hl=en&gl=US`;
-  const res = await fetch(url, { headers: HEADERS });
-  if (!res.ok) throw new Error(`YouTube search HTTP ${res.status}`);
-  const html = await res.text();
-  const data = extractJson(html, "var ytInitialData");
-  if (!data) throw new Error("YouTube search: could not parse results");
-  const renderers = collect(data, "videoRenderer");
+function toHits(data: any, limit: number): VideoHit[] {
   const hits: VideoHit[] = [];
-  for (const r of renderers) {
+  for (const r of collect(data, "videoRenderer")) {
     if (!r?.videoId) continue;
     hits.push({
       videoId: r.videoId,
@@ -104,6 +94,50 @@ export async function searchYouTube(query: string, limit = 8): Promise<VideoHit[
     if (hits.length >= limit) break;
   }
   return hits;
+}
+
+// Innertube search: small JSON, no consent/"sorry" redirects (the HTML results
+// page redirect-loops when Convex runs several searches at once).
+async function searchViaInnertube(query: string, limit: number): Promise<VideoHit[]> {
+  const res = await fetch("https://www.youtube.com/youtubei/v1/search?prettyPrint=false", {
+    method: "POST",
+    headers: { "User-Agent": UA, "Content-Type": "application/json", "Accept-Language": "en-US,en;q=0.9" },
+    body: JSON.stringify({
+      context: { client: { clientName: "WEB", clientVersion: "2.20251112.01.00", hl: "en", gl: "US" } },
+      query,
+      params: "EgIQAQ==", // videos only
+    }),
+  });
+  if (!res.ok) throw new Error(`search HTTP ${res.status}`);
+  return toHits(await res.json(), limit);
+}
+
+async function searchViaHtml(query: string, limit: number): Promise<VideoHit[]> {
+  // sp=EgIQAQ== filters to videos only.
+  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(
+    query,
+  )}&sp=EgIQAQ%253D%253D&hl=en&gl=US`;
+  const res = await fetch(url, { headers: HEADERS });
+  if (!res.ok) throw new Error(`YouTube search HTTP ${res.status}`);
+  const data = extractJson(await res.text(), "var ytInitialData");
+  if (!data) throw new Error("YouTube search: could not parse results");
+  return toHits(data, limit);
+}
+
+export async function searchYouTube(query: string, limit = 8): Promise<VideoHit[]> {
+  let first = "";
+  try {
+    const hits = await searchViaInnertube(query, limit);
+    if (hits.length) return hits;
+    first = "innertube: 0 hits";
+  } catch (e: any) {
+    first = `innertube: ${e?.message}`;
+  }
+  try {
+    return await searchViaHtml(query, limit);
+  } catch (e: any) {
+    throw new Error(`${first}; html: ${e?.message}`);
+  }
 }
 
 function decode(s: string): string {
