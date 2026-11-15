@@ -16,6 +16,24 @@ export const clip = v.object({
   why: v.optional(v.string()),
 });
 
+export const candidate = v.object({
+  videoId: v.string(),
+  title: v.string(),
+  channel: v.string(),
+  seconds: v.number(),
+  views: v.number(),
+});
+
+export const lessonStatus = v.union(
+  v.literal("planned"),
+  v.literal("building"),
+  // Videos found on the server; waiting for the phone to read their transcripts
+  // (YouTube bot-blocks transcript requests from Convex's servers).
+  v.literal("awaiting_transcripts"),
+  v.literal("ready"),
+  v.literal("failed"),
+);
+
 export default defineSchema({
   topics: defineTable({
     query: v.string(),
@@ -47,21 +65,19 @@ export default defineSchema({
     title: v.string(),
     objective: v.string(),
     searchQuery: v.string(),
-    status: v.union(
-      v.literal("planned"),
-      v.literal("building"),
-      v.literal("ready"),
-      v.literal("failed"),
-    ),
+    status: lessonStatus,
     stage: v.optional(v.string()), // human readable build progress
     error: v.optional(v.string()),
     clip: v.optional(clip),
+    candidates: v.optional(v.array(candidate)),
+    claimedAt: v.optional(v.number()), // when a phone claimed the transcript job
     transcript: v.optional(
       v.array(v.object({ t: v.number(), d: v.number(), text: v.string() })),
     ),
   })
     .index("by_topic", ["topicId", "order"])
-    .index("by_unit", ["unitId", "order"]),
+    .index("by_unit", ["unitId", "order"])
+    .index("by_status", ["status"]),
 
   questions: defineTable({
     lessonId: v.id("lessons"),

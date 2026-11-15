@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { source, clip } from "./schema";
+import { source, clip, candidate } from "./schema";
 
 // ---------- Public API used by the app ----------
 
@@ -108,8 +108,122 @@ export const ensureLesson = mutation({
     if (lesson.status === "planned" || lesson.status === "failed") {
       await ctx.db.patch(lessonId, { status: "building", stage: "Finding the best teacher", error: undefined });
       await ctx.scheduler.runAfter(0, internal.pipeline.buildLesson, { lessonId });
+    } else if (isStaleClaim(lesson)) {
+      // A phone claimed the transcripts and went away: hand the job out again.
+      await ctx.db.patch(lessonId, { status: "awaiting_transcripts", claimedAt: undefined });
     }
   },
+});
+
+// ---------- Phone-side transcript step ----------
+// YouTube bot-blocks transcript requests from Convex's servers, so the server
+// finds candidate videos and the phone reads their transcripts and sends them back.
+
+const CLAIM_TIMEOUT_MS = 45_000;
+const line = v.object({ t: v.number(), d: v.number(), text: v.string() });
+
+function isStaleClaim(l: { status: string; candidates?: unknown[]; claimedAt?: number }) {
+  return (
+    l.status === "building" &&
+    !!l.candidates?.length &&
+    !!l.claimedAt &&
+    Date.now() - l.claimedAt > CLAIM_TIMEOUT_MS
+  );
+}
+
+/** Lessons of this user that are waiting for the phone to read transcripts. */
+export const awaitingTranscripts = query({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    const waiting = await ctx.db
+      .query("lessons")
+      .withIndex("by_status", (q) => q.eq("status", "awaiting_transcripts"))
+      .take(50);
+    const out = [];
+    for (const l of waiting) {
+      const topic = await ctx.db.get(l.topicId);
+      if (topic?.userId === userId) out.push({ _id: l._id, title: l.title });
+    }
+    return out;
+  },
+});
+
+/** Atomically takes the transcript job. Returns the candidates to the first caller only. */
+export const claimTranscripts = mutation({
+  args: { lessonId: v.id("lessons") },
+  handler: async (ctx, { lessonId }) => {
+    const l = await ctx.db.get(lessonId);
+    if (!l || !l.candidates?.length) return null;
+    if (l.status !== "awaiting_transcripts" && !isStaleClaim(l)) return null;
+    await ctx.db.patch(lessonId, {
+      status: "building",
+      claimedAt: Date.now(),
+      stage: `Reading ${l.candidates.length} transcripts`,
+    });
+    return { candidates: l.candidates.map((c) => c.videoId) };
+  },
+});
+
+/** The phone sends ~8 second transcript chunks; the server picks the clip and writes questions. */
+export const submitTranscripts = mutation({
+  args: {
+    lessonId: v.id("lessons"),
+    transcripts: v.array(v.object({ videoId: v.string(), lines: v.array(line) })),
+  },
+  handler: async (ctx, { lessonId, transcripts }) => {
+    const l = await ctx.db.get(lessonId);
+    if (!l || l.status !== "building" || !l.candidates?.length || !l.claimedAt) return false;
+    const videos = [];
+    for (const t of transcripts) {
+      const c = l.candidates.find((x) => x.videoId === t.videoId);
+      if (c && t.lines.length > 5) videos.push({ ...c, lines: t.lines.slice(0, 400) });
+    }
+    if (!videos.length) {
+      await ctx.db.patch(lessonId, {
+        status: "failed",
+        error: "No usable transcripts",
+        stage: undefined,
+        candidates: undefined,
+        claimedAt: undefined,
+      });
+      return false;
+    }
+    // Clearing candidates makes a second submit a no-op.
+    await ctx.db.patch(lessonId, {
+      candidates: undefined,
+      claimedAt: undefined,
+      stage: "Picking the perfect 2 minutes",
+    });
+    await ctx.scheduler.runAfter(0, internal.pipeline.pickClip, { lessonId, videos });
+    return true;
+  },
+});
+
+/** The phone could not read any transcript. */
+export const reportTranscriptFailure = mutation({
+  args: { lessonId: v.id("lessons"), error: v.string() },
+  handler: async (ctx, { lessonId, error }) => {
+    const l = await ctx.db.get(lessonId);
+    if (!l || l.status !== "building" || !l.candidates?.length) return;
+    await ctx.db.patch(lessonId, {
+      status: "failed",
+      error: `Transcripts: ${error}`.slice(0, 500),
+      stage: undefined,
+      candidates: undefined,
+      claimedAt: undefined,
+    });
+  },
+});
+
+export const saveCandidates = internalMutation({
+  args: { lessonId: v.id("lessons"), candidates: v.array(candidate) },
+  handler: (ctx, { lessonId, candidates }) =>
+    ctx.db.patch(lessonId, {
+      status: "awaiting_transcripts",
+      candidates,
+      claimedAt: undefined,
+      stage: "Reading transcripts",
+    }),
 });
 
 function today(offsetDays = 0): string {
@@ -234,7 +348,13 @@ export const setStage = internalMutation({
 export const failLesson = internalMutation({
   args: { lessonId: v.id("lessons"), error: v.string() },
   handler: (ctx, { lessonId, error }) =>
-    ctx.db.patch(lessonId, { status: "failed", error, stage: undefined }),
+    ctx.db.patch(lessonId, {
+      status: "failed",
+      error,
+      stage: undefined,
+      candidates: undefined,
+      claimedAt: undefined,
+    }),
 });
 
 export const saveLesson = internalMutation({
@@ -265,6 +385,8 @@ export const saveLesson = internalMutation({
       status: "ready",
       stage: undefined,
       error: undefined,
+      candidates: undefined,
+      claimedAt: undefined,
       clip,
       transcript,
     });
