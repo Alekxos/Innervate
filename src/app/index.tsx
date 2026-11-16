@@ -46,6 +46,9 @@ export default function Home() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.wrap} keyboardShouldPersistTaps="handled">
           <Text style={s.brand}>✦ INNERVATE</Text>
+          <Text style={s.tagline}>
+            Duolingo for <Text style={s.taglineEm}>anything</Text>
+          </Text>
           <Text style={s.h1}>What do you want to learn?</Text>
           <Text style={s.sub}>Anything. We turn the best teachers on YouTube into a course you'll actually finish.</Text>
 
@@ -99,7 +102,9 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
   wrap: { padding: 24, paddingTop: 28, gap: 14, paddingBottom: 60 },
   brand: { color: C.accent, fontWeight: "800", fontSize: 13, letterSpacing: 4 },
-  h1: { color: C.text, fontSize: 36, fontWeight: "800", lineHeight: 42, marginTop: 28, letterSpacing: -0.5 },
+  tagline: { color: C.text, fontSize: 22, fontWeight: "700", letterSpacing: -0.2, marginTop: -2 },
+  taglineEm: { color: C.gold, fontStyle: "italic", fontWeight: "800" },
+  h1: { color: C.text, fontSize: 36, fontWeight: "800", lineHeight: 42, marginTop: 18, letterSpacing: -0.5 },
   sub: { color: C.muted, fontSize: 16, lineHeight: 23 },
   inputRow: { flexDirection: "row", gap: 10, marginTop: 14 },
   input: {
