@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "convex/react";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import YoutubePlayer, { YoutubeIframeRef } from "react-native-youtube-iframe";
 import { api } from "../../../convex/_generated/api";
@@ -11,6 +11,44 @@ import { C, fmt } from "../../lib/theme";
 import { USER_ID } from "../../lib/user";
 
 type Phase = "watch" | "quiz" | "rewind" | "done";
+
+function PopIn({ children, delay = 0, style }: { children: React.ReactNode; delay?: number; style?: object }) {
+  const [a] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    const spring = Animated.spring(a, { toValue: 1, friction: 5, tension: 120, delay, useNativeDriver: true });
+    spring.start();
+    return () => spring.stop();
+  }, [a, delay]);
+  return (
+    <Animated.View style={[style, { opacity: a, transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] }]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+function CountUp({ to, icon, delay = 0 }: { to: number; icon: string; delay?: number }) {
+  const [count] = useState(() => new Animated.Value(0));
+  const [pop] = useState(() => new Animated.Value(1));
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const sub = count.addListener(({ value }) => setShown(Math.round(value)));
+    const run = Animated.sequence([
+      Animated.timing(count, { toValue: to, duration: 700, delay, easing: Easing.out(Easing.cubic), useNativeDriver: false }),
+      Animated.timing(pop, { toValue: 1.3, duration: 120, useNativeDriver: true }),
+      Animated.spring(pop, { toValue: 1, friction: 4, tension: 140, useNativeDriver: true }),
+    ]);
+    run.start();
+    return () => {
+      run.stop();
+      count.removeListener(sub);
+    };
+  }, [count, pop, to, delay]);
+  return (
+    <Animated.Text style={[s.doneNum, { transform: [{ scale: pop }] }]}>
+      {icon} {shown}
+    </Animated.Text>
+  );
+}
 
 export default function Lesson() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -66,10 +104,11 @@ export default function Lesson() {
       if (!q || picked !== null) return;
       setPicked(i);
       if (i === q.correctIndex) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setXp((x) => x + (wrong.length ? 5 : 10));
       } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 120);
         setWrong((w) => [...w, i]);
         // The rewind: jump to the exact seconds that explain the answer.
         setTimeout(() => {
@@ -226,17 +265,19 @@ export default function Lesson() {
 
         {phase === "done" && (
           <View style={s.done}>
-            <Text style={s.bigEmoji}>🎉</Text>
+            <PopIn>
+              <Text style={s.bigEmoji}>🎉</Text>
+            </PopIn>
             <Text style={s.h1}>Lesson complete</Text>
             <View style={s.doneStats}>
-              <View style={s.doneStat}>
-                <Text style={s.doneNum}>⚡ {xp}</Text>
+              <PopIn delay={150} style={s.doneStat}>
+                <CountUp to={xp} icon="⚡" delay={300} />
                 <Text style={s.muted}>XP earned</Text>
-              </View>
-              <View style={s.doneStat}>
-                <Text style={s.doneNum}>🔥 {result?.streak ?? "…"}</Text>
+              </PopIn>
+              <PopIn delay={300} style={s.doneStat}>
+                {result ? <CountUp to={result.streak} icon="🔥" delay={450} /> : <Text style={s.doneNum}>🔥 …</Text>}
                 <Text style={s.muted}>day streak</Text>
-              </View>
+              </PopIn>
             </View>
             {result?.nextLessonId && (
               <Btn testID="next-lesson" label="Next lesson →" onPress={() => router.replace(`/lesson/${result.nextLessonId}`)} />
