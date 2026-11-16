@@ -392,3 +392,46 @@ export const saveLesson = internalMutation({
     });
   },
 });
+
+/** Removes a topic and everything under it (units, lessons, questions, progress).
+ *   npx convex run topics:deleteTopic '{"topicId":"..."}' */
+export const deleteTopic = internalMutation({
+  args: { topicId: v.id("topics") },
+  handler: async (ctx, { topicId }) => {
+    const lessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_topic", (q) => q.eq("topicId", topicId))
+      .collect();
+    for (const l of lessons) {
+      const qs = await ctx.db
+        .query("questions")
+        .withIndex("by_lesson", (q) => q.eq("lessonId", l._id))
+        .collect();
+      for (const q of qs) await ctx.db.delete(q._id);
+      await ctx.db.delete(l._id);
+    }
+    const units = await ctx.db
+      .query("units")
+      .withIndex("by_topic", (q) => q.eq("topicId", topicId))
+      .collect();
+    for (const u of units) await ctx.db.delete(u._id);
+    const progress = (await ctx.db.query("progress").collect()).filter((p) => p.topicId === topicId);
+    for (const p of progress) await ctx.db.delete(p._id);
+    await ctx.db.delete(topicId);
+    return { lessons: lessons.length, units: units.length, progress: progress.length };
+  },
+});
+
+/** Demo reset: streak 0 and XP 0; finishing a lesson today makes it 1.
+ *   npx convex run topics:resetStreak '{"userId":"demo-learner"}' */
+export const resetStreak = internalMutation({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    const s = await ctx.db
+      .query("streaks")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (s) await ctx.db.patch(s._id, { current: 0, xp: 0, lastDay: "" });
+    return s ? { before: { current: s.current, xp: s.xp, lastDay: s.lastDay } } : null;
+  },
+});
