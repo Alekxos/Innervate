@@ -257,7 +257,8 @@ export default function Roadmap() {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, backgroundColor: C.bg, alignItems: "center", justifyContent: "center" },
-  top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 8 },
+  // Right padding keeps the streak and XP clear of Expo Go's floating tools button.
+  top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingLeft: 20, paddingRight: 76, paddingVertical: 8 },
   back: { color: C.text, fontSize: 34, lineHeight: 34 },
   stats: { flexDirection: "row", gap: 14 },
   stat: { color: C.gold, fontWeight: "800", fontSize: 16 },

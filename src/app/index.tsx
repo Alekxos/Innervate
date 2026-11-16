@@ -10,10 +10,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
+import { StarField } from "../components/StarField";
 import { C } from "../lib/theme";
 import { USER_ID } from "../lib/user";
 
@@ -24,6 +26,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const create = useMutation(api.topics.create);
   const topics = useQuery(api.topics.list, { userId: USER_ID });
+  const { width, height } = useWindowDimensions();
 
   async function go(q: string) {
     if (!q.trim() || busy) return;
@@ -39,9 +42,10 @@ export default function Home() {
 
   return (
     <SafeAreaView style={s.safe}>
+      <StarField width={width} height={height} />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.wrap} keyboardShouldPersistTaps="handled">
-          <Text style={s.brand}>innervate</Text>
+          <Text style={s.brand}>✦ INNERVATE</Text>
           <Text style={s.h1}>What do you want to learn?</Text>
           <Text style={s.sub}>Anything. We turn the best teachers on YouTube into a course you'll actually finish.</Text>
 
@@ -73,7 +77,9 @@ export default function Home() {
           {!!topics?.length && <Text style={s.section}>Your courses</Text>}
           {topics?.map((t) => (
             <Pressable key={t._id} onPress={() => router.push(`/topic/${t._id}`)} style={s.course}>
-              <Text style={s.courseEmoji}>{t.emoji ?? "📘"}</Text>
+              <View style={s.courseBadge}>
+                <Text style={s.courseEmoji}>{t.emoji ?? "📘"}</Text>
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.courseTitle}>{t.title}</Text>
                 <Text style={s.courseSub} numberOfLines={1}>
@@ -91,31 +97,57 @@ export default function Home() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
-  wrap: { padding: 24, paddingTop: 32, gap: 14 },
-  brand: { color: C.accent, fontWeight: "800", fontSize: 18, letterSpacing: 1 },
-  h1: { color: C.text, fontSize: 34, fontWeight: "800", lineHeight: 40, marginTop: 24 },
-  sub: { color: C.muted, fontSize: 16, lineHeight: 22 },
-  inputRow: { flexDirection: "row", gap: 10, marginTop: 12 },
+  wrap: { padding: 24, paddingTop: 28, gap: 14, paddingBottom: 60 },
+  brand: { color: C.accent, fontWeight: "800", fontSize: 13, letterSpacing: 4 },
+  h1: { color: C.text, fontSize: 36, fontWeight: "800", lineHeight: 42, marginTop: 28, letterSpacing: -0.5 },
+  sub: { color: C.muted, fontSize: 16, lineHeight: 23 },
+  inputRow: { flexDirection: "row", gap: 10, marginTop: 14 },
   input: {
     flex: 1,
     backgroundColor: C.card,
     color: C.text,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 17,
     fontSize: 17,
     borderWidth: 1,
     borderColor: C.line,
   },
-  go: { backgroundColor: C.accent, borderRadius: 16, paddingHorizontal: 22, justifyContent: "center" },
+  go: {
+    backgroundColor: C.accent,
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    justifyContent: "center",
+    shadowColor: C.accent,
+    shadowOpacity: 0.7,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+  },
   goText: { color: "#fff", fontWeight: "800", fontSize: 17 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { backgroundColor: C.card, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: C.line },
-  chipText: { color: C.text, fontSize: 14 },
-  section: { color: C.muted, fontWeight: "700", marginTop: 24, textTransform: "uppercase", fontSize: 12, letterSpacing: 1 },
-  course: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: C.card, padding: 16, borderRadius: 18 },
-  courseEmoji: { fontSize: 30 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
+  chip: {
+    backgroundColor: "rgba(143,124,255,0.10)",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: "rgba(143,124,255,0.32)",
+  },
+  chipText: { color: "#DAD5FF", fontSize: 14, fontWeight: "600" },
+  section: { color: C.muted, fontWeight: "700", marginTop: 28, textTransform: "uppercase", fontSize: 12, letterSpacing: 2 },
+  course: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: C.card,
+    padding: 14,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: C.line,
+  },
+  courseBadge: { width: 52, height: 52, borderRadius: 16, backgroundColor: C.cardHi, alignItems: "center", justifyContent: "center" },
+  courseEmoji: { fontSize: 26 },
   courseTitle: { color: C.text, fontWeight: "700", fontSize: 17 },
-  courseSub: { color: C.muted, fontSize: 13, marginTop: 2 },
-  chev: { color: C.muted, fontSize: 28 },
+  courseSub: { color: C.muted, fontSize: 13, marginTop: 3 },
+  chev: { color: C.muted, fontSize: 26 },
 });

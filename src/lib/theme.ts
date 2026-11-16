@@ -1,17 +1,18 @@
+// Night-sky palette: deep indigo space, starlight text, violet accent, aurora mint, warm gold.
 export const C = {
-  bg: "#0B0E14",
-  card: "#151A23",
-  cardHi: "#1C2330",
-  line: "#263042",
-  text: "#F2F4F8",
-  muted: "#8A93A6",
-  accent: "#7C5CFF",
-  accentSoft: "#2A2150",
-  mint: "#2EE6A6",
-  mintSoft: "#123A2F",
-  gold: "#FFC24B",
-  red: "#FF5C7A",
-  redSoft: "#3A1621",
+  bg: "#070A1A",
+  card: "#111734",
+  cardHi: "#1A2248",
+  line: "#2A3363",
+  text: "#F3F5FF",
+  muted: "#8E97C4",
+  accent: "#8F7CFF",
+  accentSoft: "#201C4D",
+  mint: "#62E6C3",
+  mintSoft: "#103B3A",
+  gold: "#FFD68A",
+  red: "#FF6F8E",
+  redSoft: "#3A1730",
 };
 
 export function fmt(sec: number): string {
