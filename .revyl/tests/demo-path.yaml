@@ -1,0 +1,38 @@
+# Revyl Test Definition
+
+_meta:
+    remote_id: d211cd19-af28-4d98-a7ac-dd5765ea6d97
+    remote_version: 2
+    local_version: 2
+    last_synced_at: "2026-11-15T17:48:35-08:00"
+    checksum: 9895c83cd1a47c997dd939a1520da3a177f31661ecfbe7a59ac4e5f607fef5b9
+test:
+    metadata:
+        name: demo-path
+        platform: ios
+    build:
+        name: innervate iOS
+        build_selection: inherit
+    blocks:
+        - type: instructions
+          step_description: Tap the text field that says 'e.g. how jet engines work' and type 'how jet engines work'.
+        - type: instructions
+          step_description: Tap the 'Go' button.
+        - type: instructions
+          step_description: Wait up to 30 seconds until a 'UNIT 1' card and at least 3 lesson titles are visible.
+        - type: validation
+          step_description: A 'Built from' row shows at least one source.
+        - type: instructions
+          step_description: Tap the round play button of the first lesson.
+        - type: instructions
+          step_description: Wait up to 60 seconds until a video is playing and the button 'I've got it, quiz me' is visible.
+        - type: instructions
+          step_description: Tap 'I've got it, quiz me'.
+        - type: validation
+          step_description: '''QUESTION 1 OF'' is visible with four answer choices.'
+        - type: instructions
+          step_description: Tap one answer. If it is marked wrong, wait for the video to replay the explaining part, then tap a different answer. Repeat until an answer is marked correct.
+        - type: instructions
+          step_description: Tap 'Continue'. Answer the next questions the same way, tapping 'Continue' after each, until 'Lesson complete' is visible.
+        - type: validation
+          step_description: '''Lesson complete'' and a day streak with the fire emoji are visible.'
