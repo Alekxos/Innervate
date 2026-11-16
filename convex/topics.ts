@@ -437,7 +437,7 @@ export const resetStreak = internalMutation({
 });
 
 /** Demo reset (tapping Nova): keep one copy of each core course, remove the rest, streak back to 0. */
-const CORE = ["how jet engines work", "sourdough baking", "options pricing", "linear algebra"];
+const CORE = ["how jet engines work", "sourdough baking", "options pricing"];
 export const resetDemo = mutation({
   args: { userId: v.string() },
   handler: async (ctx, { userId }) => {
