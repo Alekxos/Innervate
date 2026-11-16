@@ -177,6 +177,9 @@ const pickSchema = obj({
   ),
 });
 
+const isStartupTopic = (q: string) => /startup|start-up|founder|y ?combinator|\byc\b/i.test(q);
+const isYC = (channel: string) => /^y ?combinator$/i.test(channel.trim());
+
 // Prefer real explainers: 2 to 40 minutes long, not shorts.
 const isExplainer = (h: VideoHit) => h.seconds >= 120 && h.seconds <= 2400;
 const MAX_CANDIDATES = 4;
@@ -224,10 +227,17 @@ export const buildLesson = internalAction({
     if (!c || !c.topic) return;
     const { lesson, topic } = c;
     try {
-      const { hits, errors } = await searchCandidates([
+      // Startup topics: look on Y Combinator's channel first and put its videos first.
+      const yc = isStartupTopic(topic.query);
+      const found = await searchCandidates([
+        ...(yc ? [`Y Combinator ${lesson.title}`] : []),
         lesson.searchQuery,
         `${lesson.title} ${topic.query} explained`,
       ]);
+      const errors = found.errors;
+      const hits = yc
+        ? [...found.hits.filter((h) => isYC(h.channel)), ...found.hits.filter((h) => !isYC(h.channel))]
+        : found.hits;
       if (!hits.length) throw new Error(`No explainer videos found. ${errors.join("; ")}`);
       if (process.env.SUPADATA_API_KEY) {
         const { cands, errors: tErrors } = await withServerTranscripts(hits);
@@ -321,7 +331,7 @@ Then write exactly 3 multiple-choice questions answerable ONLY from what is said
     user: `Course: ${topic.title} (${topic.query})
 Lesson: ${lesson.title}
 Objective: ${lesson.objective}
-Other lessons in the course (do not teach these): ${c.siblings.filter((s) => s !== lesson.title).join("; ")}
+Other lessons in the course (do not teach these): ${c.siblings.filter((s) => s !== lesson.title).join("; ")}${isStartupTopic(topic.query) && cands.some((v) => isYC(v.channel)) ? "\nStrongly prefer the Y Combinator video if it covers this lesson at all." : ""}
 
 ${listing}`,
   });
