@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDi
 import { SafeAreaView } from "react-native-safe-area-context";
 import YoutubePlayer, { YoutubeIframeRef } from "react-native-youtube-iframe";
 import { api } from "../../../convex/_generated/api";
+import { Mascot } from "../../components/Mascot";
 import { Id } from "../../../convex/_generated/dataModel";
 import { C, fmt } from "../../lib/theme";
 import { USER_ID } from "../../lib/user";
@@ -226,8 +227,11 @@ export default function Lesson() {
 
         {phase === "done" && (
           <View style={s.done}>
-            <Text style={s.bigEmoji}>🎉</Text>
-            <Text style={s.h1}>Lesson complete</Text>
+            <View style={{ alignItems: "center" }}>
+              <Mascot size={92} />
+            </View>
+            <Text style={[s.h1, { textAlign: "center" }]}>Lesson complete 🎉</Text>
+            <Text style={s.muted}>Nova lit a new star for you.</Text>
             <View style={s.doneStats}>
               <View style={s.doneStat}>
                 <Text style={s.doneNum}>⚡ {xp}</Text>
