@@ -71,6 +71,7 @@ export default function Home() {
   const topics = useQuery(api.topics.list, { userId: USER_ID });
   const { width, height } = useWindowDimensions();
   const [intro, setIntro] = useState(!introSeen);
+  const resetDemo = useMutation(api.topics.resetDemo);
 
   // Nova zooms in from the left, then dashes across the header every few seconds.
   const zoom = useRef(new Animated.Value(-1)).current;
@@ -124,7 +125,7 @@ export default function Home() {
                 ],
               }}
             >
-              <Pressable testID="nova" onPress={() => setIntro(true)} hitSlop={8}>
+              <Pressable testID="nova" onPress={() => { resetDemo({ userId: USER_ID }).catch(() => {}); setIntro(true); }} hitSlop={8}>
                 <Mascot size={56} flying />
               </Pressable>
             </Animated.View>

@@ -435,3 +435,42 @@ export const resetStreak = internalMutation({
     return s ? { before: { current: s.current, xp: s.xp, lastDay: s.lastDay } } : null;
   },
 });
+
+/** Demo reset (tapping Nova): keep one copy of each core course, remove the rest, streak back to 0. */
+const CORE = ["how jet engines work", "sourdough baking", "options pricing", "linear algebra"];
+export const resetDemo = mutation({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    const topics = await ctx.db
+      .query("topics")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("asc")
+      .collect();
+    const kept = new Set<string>();
+    let removed = 0;
+    for (const t of topics) {
+      const key = t.query.trim().toLowerCase();
+      if (CORE.includes(key) && !kept.has(key) && t.status === "ready") {
+        kept.add(key);
+        continue;
+      }
+      for (const l of await ctx.db.query("lessons").withIndex("by_topic", (q) => q.eq("topicId", t._id)).collect()) {
+        for (const q of await ctx.db.query("questions").withIndex("by_lesson", (x) => x.eq("lessonId", l._id)).collect())
+          await ctx.db.delete(q._id);
+        await ctx.db.delete(l._id);
+      }
+      for (const u of await ctx.db.query("units").withIndex("by_topic", (q) => q.eq("topicId", t._id)).collect())
+        await ctx.db.delete(u._id);
+      for (const p of await ctx.db.query("progress").withIndex("by_user_topic", (q) => q.eq("userId", userId).eq("topicId", t._id)).collect())
+        await ctx.db.delete(p._id);
+      await ctx.db.delete(t._id);
+      removed++;
+    }
+    const s = await ctx.db
+      .query("streaks")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (s) await ctx.db.patch(s._id, { current: 0, xp: 0, lastDay: "" });
+    return { removed };
+  },
+});
