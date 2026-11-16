@@ -228,7 +228,7 @@ export default function Lesson() {
         {phase === "done" && (
           <View style={s.done}>
             <View style={{ alignItems: "center" }}>
-              <Mascot size={92} />
+              <Mascot size={92} flying />
             </View>
             <Text style={[s.h1, { textAlign: "center" }]}>Lesson complete 🎉</Text>
             <Text style={s.muted}>Nova lit a new star for you.</Text>
