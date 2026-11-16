@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef } from "react";
-import { ActivityIndicator, Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -38,17 +38,81 @@ function Pulse({ children }: { children: React.ReactNode }) {
 }
 
 const SOURCE_ICON: Record<string, string> = { syllabus: "🎓", course: "🎓", book: "📖", channel: "▶️", article: "📄" };
-const OFFSETS = [0, 60, 90, 60, 0, -60, -90, -60];
+// ---------- Constellation layout ----------
+// Each unit is a bright star; its lessons are smaller stars joined by lines,
+// and the last lesson links down to the next unit's star.
+const UNIT_H = 400;
+const STAR_Y = 92;
+const PATTERNS: [number, number][][] = [
+  [[0.24, 182], [0.7, 260], [0.36, 340]],
+  [[0.76, 182], [0.3, 262], [0.64, 340]],
+];
+
+type Pt = { x: number; y: number };
+
+function Segment({ a, b, lit }: { a: Pt; b: Pt; lit: boolean }) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: (a.x + b.x) / 2 - len / 2,
+        top: (a.y + b.y) / 2 - 1,
+        width: len,
+        height: lit ? 2 : 1.5,
+        backgroundColor: lit ? C.mint : "rgba(160,170,255,0.22)",
+        shadowColor: lit ? C.mint : "transparent",
+        shadowOpacity: lit ? 0.9 : 0,
+        shadowRadius: 6,
+        transform: [{ rotate: `${angle}deg` }],
+      }}
+    />
+  );
+}
+
+// Deterministic tiny starfield so it does not flicker between renders.
+function Starfield({ width, height, seed }: { width: number; height: number; seed: number }) {
+  const dots = [];
+  let r = seed * 9301 + 49297;
+  const rand = () => {
+    r = (r * 9301 + 49297) % 233280;
+    return r / 233280;
+  };
+  for (let i = 0; i < 26; i++) {
+    const size = rand() < 0.15 ? 2.5 : 1.4;
+    dots.push(
+      <View
+        key={i}
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: rand() * width,
+          top: rand() * height,
+          width: size,
+          height: size,
+          borderRadius: size,
+          backgroundColor: "#fff",
+          opacity: 0.15 + rand() * 0.45,
+        }}
+      />,
+    );
+  }
+  return <>{dots}</>;
+}
 
 export default function Roadmap() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const data = useQuery(api.topics.roadmap, { topicId: id as Id<"topics">, userId: USER_ID });
+  const { width } = useWindowDimensions();
 
   if (data === undefined) return <View style={s.center}><ActivityIndicator color={C.accent} /></View>;
   if (data === null) return <View style={s.center}><Text style={s.muted}>Course not found</Text></View>;
   const { topic, units, streak, completed } = data;
   const total = units.reduce((n, u) => n + u.lessons.length, 0);
-  let idx = 0;
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
@@ -92,48 +156,87 @@ export default function Roadmap() {
           )}
         </View>
 
-        {units.map((u, ui) => (
-          <FadeIn key={u._id}>
-            <View style={s.unit}>
-              <Text style={s.unitLabel}>UNIT {ui + 1}</Text>
-              <Text style={s.unitTitle}>{u.title}</Text>
-            </View>
-            {u.lessons.map((l) => {
-              const offset = OFFSETS[idx++ % OFFSETS.length];
-              const node = (
-                <View
-                  style={[
-                    s.node,
-                    l.done && { backgroundColor: C.mint, borderColor: C.mintSoft },
-                    l.unlocked && !l.done && { backgroundColor: C.accent, borderColor: C.accentSoft },
-                  ]}
-                >
-                  <Text style={s.nodeIcon}>{l.done ? "✓" : l.unlocked ? "▶" : "🔒"}</Text>
+        {units.map((u, ui) => {
+          const W = width - 48;
+          const star = { x: W / 2, y: STAR_Y };
+          const pts = u.lessons.map((_, li) => {
+            const p = PATTERNS[ui % 2][li % 3];
+            return { x: p[0] * W, y: p[1] };
+          });
+          const allDone = u.lessons.length > 0 && u.lessons.every((l) => l.done);
+          const anyOpen = u.lessons.some((l) => l.unlocked);
+          const chain = [star, ...pts];
+          const last = pts[pts.length - 1] ?? star;
+          return (
+            <FadeIn key={u._id}>
+              <View style={{ height: UNIT_H, width: W }}>
+                <Starfield width={W} height={UNIT_H} seed={ui + 1} />
+                {/* link from the previous unit */}
+                {ui > 0 && <Segment a={{ x: W / 2, y: 0 }} b={star} lit={u.lessons[0]?.unlocked ?? false} />}
+                {chain.slice(1).map((p, i) => (
+                  <Segment key={i} a={chain[i]} b={p} lit={!!u.lessons[i]?.unlocked && (i === 0 || !!u.lessons[i - 1]?.done)} />
+                ))}
+                {ui < units.length - 1 && <Segment a={last} b={{ x: W / 2, y: UNIT_H }} lit={allDone} />}
+
+                {/* unit star */}
+                <View style={[s.unitHead, { width: W }]}>
+                  <Text style={s.unitLabel}>UNIT {ui + 1}</Text>
+                  <Text style={s.unitTitle} numberOfLines={1}>{u.title}</Text>
                 </View>
-              );
-              return (
-                <FadeIn key={l._id}>
-                  <Pressable
-                    testID={`lesson-${l.order}`}
-                    disabled={!l.unlocked}
-                    onPress={() => router.push(`/lesson/${l._id}`)}
-                    style={[s.nodeRow, { transform: [{ translateX: offset }] }]}
-                  >
-                    {l.unlocked && !l.done ? <Pulse>{node}</Pulse> : node}
-                    <View style={{ maxWidth: 180 }}>
-                      <Text style={[s.lessonTitle, !l.unlocked && { color: C.muted }]}>{l.title}</Text>
-                      {l.unlocked && !l.done && (
-                        <Text style={s.lessonHint}>
-                          {l.status === "ready" ? `Ready · ${l.channel ?? ""}` : "Preparing your clip…"}
-                        </Text>
-                      )}
+                <View style={[s.unitStar, { left: star.x - 30, top: star.y - 30 }, allDone ? s.unitStarDone : anyOpen ? s.unitStarOpen : null]}>
+                  <Text style={[s.unitStarIcon, allDone && { color: C.bg }]}>★</Text>
+                </View>
+
+                {u.lessons.map((l, li) => {
+                  const p = pts[li];
+                  const right = p.x < W / 2;
+                  const size = l.unlocked && !l.done ? 52 : 40;
+                  const node = (
+                    <View
+                      style={[
+                        s.star,
+                        { width: size, height: size, borderRadius: size / 2 },
+                        l.done && s.starDone,
+                        l.unlocked && !l.done && s.starOpen,
+                      ]}
+                    >
+                      <Text style={[s.starIcon, l.done && { color: C.bg }]}>{l.done ? "✓" : l.unlocked ? "▶" : "✦"}</Text>
                     </View>
-                  </Pressable>
-                </FadeIn>
-              );
-            })}
-          </FadeIn>
-        ))}
+                  );
+                  return (
+                    <Pressable
+                      key={l._id}
+                      testID={`lesson-${l.order}`}
+                      disabled={!l.unlocked}
+                      onPress={() => router.push(`/lesson/${l._id}`)}
+                      hitSlop={10}
+                      style={{ position: "absolute", left: p.x - size / 2, top: p.y - size / 2 }}
+                    >
+                      {l.unlocked && !l.done ? <Pulse>{node}</Pulse> : node}
+                      <View
+                        style={[
+                          s.label,
+                          right ? { left: size + 10 } : { right: size + 10, alignItems: "flex-end" },
+                          { top: size / 2 - 18 },
+                        ]}
+                        pointerEvents="none"
+                      >
+                        <Text style={[s.lessonTitle, !l.unlocked && { color: C.muted }, !right && { textAlign: "right" }]} numberOfLines={2}>
+                          {l.title}
+                        </Text>
+                        {l.unlocked && !l.done && (
+                          <Text style={s.lessonHint} numberOfLines={1}>
+                            {l.status === "ready" ? `Ready · ${l.channel ?? ""}` : "Preparing your clip…"}
+                          </Text>
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </FadeIn>
+          );
+        })}
 
         {topic.goal && topic.status === "ready" && (
           <FadeIn delay={200}>
@@ -168,23 +271,42 @@ const s = StyleSheet.create({
   builtFrom: { color: C.muted, fontSize: 13, marginRight: 4 },
   source: { backgroundColor: C.card, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: C.line, maxWidth: 260 },
   sourceText: { color: C.text, fontSize: 12 },
-  unit: { marginTop: 30, marginBottom: 10, backgroundColor: C.card, borderRadius: 16, padding: 14 },
-  unitLabel: { color: C.accent, fontWeight: "800", fontSize: 11, letterSpacing: 1 },
-  unitTitle: { color: C.text, fontWeight: "700", fontSize: 18, marginTop: 2 },
-  nodeRow: { flexDirection: "row", alignItems: "center", gap: 14, alignSelf: "center", marginVertical: 10 },
-  node: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: C.cardHi,
-    borderWidth: 5,
-    borderColor: C.line,
+  unitHead: { position: "absolute", top: 4, left: 0, alignItems: "center" },
+  unitLabel: { color: C.accent, fontWeight: "800", fontSize: 11, letterSpacing: 2 },
+  unitTitle: { color: C.text, fontWeight: "700", fontSize: 18, marginTop: 2, letterSpacing: 0.2 },
+  unitStar: {
+    position: "absolute",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(124,92,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(160,170,255,0.25)",
   },
-  nodeIcon: { color: "#fff", fontSize: 24, fontWeight: "800" },
-  lessonTitle: { color: C.text, fontWeight: "700", fontSize: 15 },
-  lessonHint: { color: C.mint, fontSize: 12, marginTop: 2 },
+  unitStarOpen: {
+    backgroundColor: "rgba(124,92,255,0.28)",
+    borderColor: C.accent,
+    shadowColor: C.accent,
+    shadowOpacity: 0.9,
+    shadowRadius: 18,
+  },
+  unitStarDone: { backgroundColor: C.gold, borderColor: C.gold, shadowColor: C.gold, shadowOpacity: 0.9, shadowRadius: 18 },
+  unitStarIcon: { color: C.gold, fontSize: 28, fontWeight: "800" },
+  star: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(160,170,255,0.28)",
+  },
+  starOpen: { backgroundColor: C.accent, borderColor: "#B9A8FF", shadowColor: C.accent, shadowOpacity: 1, shadowRadius: 16 },
+  starDone: { backgroundColor: C.mint, borderColor: C.mint, shadowColor: C.mint, shadowOpacity: 0.9, shadowRadius: 12 },
+  starIcon: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  label: { position: "absolute", width: 150 },
+  lessonTitle: { color: C.text, fontWeight: "700", fontSize: 14, lineHeight: 18 },
+  lessonHint: { color: C.mint, fontSize: 11, marginTop: 2 },
   goal: { marginTop: 36, backgroundColor: C.accentSoft, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: C.accent },
   goalLabel: { color: C.gold, fontWeight: "800", fontSize: 12, letterSpacing: 1 },
   goalText: { color: C.text, fontSize: 17, fontWeight: "700", marginTop: 6, lineHeight: 23 },
